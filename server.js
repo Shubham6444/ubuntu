@@ -86,7 +86,7 @@ class VMManager {
             const container = await docker.createContainer({
                 Image: "ubuntu:22.04",
                 name: containerName,
-Cmd: ["/bin/bash", "-c", "service ssh start && service nginx start && tail -f /dev/null"],
+                Cmd: ["/bin/bash", "-c", "sleep infinity"],
                 
                 ExposedPorts: {
                     "22/tcp": {},
@@ -130,7 +130,6 @@ Cmd: ["/bin/bash", "-c", "service ssh start && service nginx start && tail -f /d
   "service ssh restart",
   "service nginx restart"
 ]
-
 
             for (const cmd of commands) {
                 const execInstance = await container.exec({
