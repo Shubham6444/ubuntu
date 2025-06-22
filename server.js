@@ -78,72 +78,72 @@ class VMManager {
         await fs.ensureDir(path.dirname(CONFIG.DATA_FILE))
         await fs.writeJson(CONFIG.DATA_FILE, data, { spaces: 2 })
     }
-static async createContainer(userId, password, sshPort, httpPort) {
-    const containerName = `vm_${userId}`
-    const actualPassword = password?.trim() || "ubuntupass"
+    static async createContainer(userId, password, sshPort, httpPort) {
+        const containerName = `vm_${userId}`
+        const actualPassword = password?.trim() || "ubuntupass"
 
-    try {
-        const container = await docker.createContainer({
-            Image: "ubuntu:22.04",
-            name: containerName,
-            Cmd: ["/bin/bash", "-c", "sleep infinity"],
-            ExposedPorts: {
-                "22/tcp": {},
-                "80/tcp": {},
-            },
-            HostConfig: {
-                PortBindings: {
-                    "22/tcp": [{ HostPort: sshPort.toString() }],
-                    "80/tcp": [{ HostPort: httpPort.toString() }],
+        try {
+            const container = await docker.createContainer({
+                Image: "ubuntu:22.04",
+                name: containerName,
+                Cmd: ["/bin/bash", "-c", "sleep infinity"],
+                ExposedPorts: {
+                    "22/tcp": {},
+                    "80/tcp": {},
                 },
-                Privileged: true,
-                Binds: ["/:/host", "/var/run/docker.sock:/var/run/docker.sock"],
-                Memory: 512 * 1024 * 1024,
-                CpuShares: 512,
-            },
-            Tty: true,
-            OpenStdin: true,
-        })
-
-        await container.start()
-        console.log(`Container ${containerName} started.`)
-
-        // Wait a bit to stabilize
-        await new Promise((r) => setTimeout(r, 3000))
-
-        // Install and configure inside the container
-        const commands = [
-            "apt-get update",
-            "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
-            "mkdir -p /var/run/sshd",
-            "useradd -m -s /bin/bash devuser",
-            `echo 'devuser:${actualPassword}' | chpasswd`,
-            "usermod -aG sudo devuser",
-            "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
-            `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
-            "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-            "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-            "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
-            "service ssh start",
-            "service nginx start"
-        ]
-
-        for (const cmd of commands) {
-            const execInstance = await container.exec({
-                Cmd: ["/bin/bash", "-c", cmd],
-                AttachStdout: true,
-                AttachStderr: true,
+                HostConfig: {
+                    PortBindings: {
+                        "22/tcp": [{ HostPort: sshPort.toString() }],
+                        "80/tcp": [{ HostPort: httpPort.toString() }],
+                    },
+                    Privileged: true,
+                    Binds: ["/:/host", "/var/run/docker.sock:/var/run/docker.sock"],
+                    Memory: 512 * 1024 * 1024,
+                    CpuShares: 512,
+                },
+                Tty: true,
+                OpenStdin: true,
             })
-            const stream = await execInstance.start()
-            await new Promise((resolve) => setTimeout(resolve, 300))
-        }
 
-        return container
-    } catch (error) {
-        console.error("Container creation error:", error)
-        throw error
+            await container.start()
+            console.log(`Container ${containerName} started.`)
+
+            // Wait a bit to stabilize
+            await new Promise((r) => setTimeout(r, 3000))
+
+            // Install and configure inside the container
+            const commands = [
+                "apt-get update",
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
+                "mkdir -p /var/run/sshd",
+                "useradd -m -s /bin/bash devuser",
+                `echo 'devuser:${actualPassword}' | chpasswd`,
+                "usermod -aG sudo devuser",
+                "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
+                `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
+                "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+                "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+                "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
+                "service ssh start",
+                "service nginx start"
+            ]
+
+            for (const cmd of commands) {
+                const execInstance = await container.exec({
+                    Cmd: ["/bin/bash", "-c", cmd],
+                    AttachStdout: true,
+                    AttachStderr: true,
+                })
+                const stream = await execInstance.start()
+                await new Promise((resolve) => setTimeout(resolve, 300))
+            }
+
+            return container
+        } catch (error) {
+            console.error("Container creation error:", error)
+            throw error
+        }
     }
-}
 
     static async generateNginxConfig(userId, httpPort, subdomain) {
         const configContent = `
@@ -416,7 +416,7 @@ app.get("/dashboard", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "dashboard.html"))
 })
 
-// Start server
+// Start serverdd
 app.listen(CONFIG.PORT, () => {
     console.log(`VM Provisioning Platform running on port ${CONFIG.PORT}`)
     console.log(`Access the platform at http://localhost:${CONFIG.PORT}`)
