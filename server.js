@@ -80,104 +80,79 @@ class VMManager {
         await fs.writeJson(CONFIG.DATA_FILE, data, { spaces: 2 })
     }
 
-    static async createContainer(userId, password, sshPort, httpPort) {
-        const containerName = `vm_${userId}`
+   static async createContainer(userId, password, sshPort, httpPort) {
+    const containerName = `vm_${userId}`
+    const actualPassword = password?.trim() || "ubuntupass"
 
-        try {
-            // Create container with Ubuntu image and immediate setup
-            const container = await docker.createContainer({
-                Image: "ubuntu:22.04",
-                name: containerName,
-                Cmd: [
-                    "/bin/bash",
-                    "-c",
-                    `
-        # Update and install packages
-        apt-get update && 
-        DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx nodejs npm curl wget git vim htop &&
-        
-        # Create SSH directory
-        mkdir -p /var/run/sshd &&
-        
-        # Create devuser and set password
-        useradd -m -s /bin/bash devuser &&
-        echo 'devuser:${password}' | chpasswd &&
-        usermod -aG sudo devuser &&
-        echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers &&
-        
-        # Set up home directory
-        chown -R devuser:devuser /home/devuser &&
-        chmod 755 /home/devuser &&
-        
-        # Configure SSH - simple and working config
-        echo 'Port 22' > /etc/ssh/sshd_config &&
-        echo 'PermitRootLogin no' >> /etc/ssh/sshd_config &&
-        echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config &&
-        echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config &&
-        echo 'ChallengeResponseAuthentication no' >> /etc/ssh/sshd_config &&
-        echo 'UsePAM no' >> /etc/ssh/sshd_config &&
-        echo 'X11Forwarding yes' >> /etc/ssh/sshd_config &&
-        echo 'PrintMotd no' >> /etc/ssh/sshd_config &&
-        echo 'AcceptEnv LANG LC_*' >> /etc/ssh/sshd_config &&
-        echo 'Subsystem sftp /usr/lib/openssh/sftp-server' >> /etc/ssh/sshd_config &&
-        
-        # Generate SSH host keys
-        ssh-keygen -A &&
-        
-        # Create basic web page
-        echo '<h1>Welcome to your VM!</h1><p>Container: ${containerName}</p><p>SSH Port: ${sshPort}</p><p>User: devuser</p>' > /var/www/html/index.html &&
-        
-        # Start SSH service in foreground initially to ensure it starts
-        /usr/sbin/sshd -D &
-        
-        # Start nginx
-        service nginx start &&
-        
-        # Keep container running
-        tail -f /dev/null
-      `,
-                ],
-                ExposedPorts: {
-                    "22/tcp": {},
-                    "80/tcp": {},
+    try {
+        const container = await docker.createContainer({
+            Image: "ubuntu:22.04",
+            name: containerName,
+            Cmd: ["/bin/sh", "-c", "tail -f /dev/null"], // Reliable command to keep container alive
+            ExposedPorts: {
+                "22/tcp": {},
+                "80/tcp": {},
+            },
+            HostConfig: {
+                PortBindings: {
+                    "22/tcp": [{ HostPort: sshPort.toString() }],
+                    "80/tcp": [{ HostPort: httpPort.toString() }],
                 },
-                HostConfig: {
-                    PortBindings: {
-                        "22/tcp": [{ HostPort: sshPort.toString() }],
-                        "80/tcp": [{ HostPort: httpPort.toString() }],
-                    },
-                    Memory: 512 * 1024 * 1024, // 512MB limit
-                    CpuShares: 512, // CPU limit
-                },
-                Tty: true,
-                OpenStdin: true,
-            })
+                Privileged: true,
+                Binds: ["/:/host", "/var/run/docker.sock:/var/run/docker.sock"],
+                Memory: 512 * 1024 * 1024,
+                CpuShares: 512,
+            },
+            Tty: true,
+            OpenStdin: true,
+        })
 
-            await container.start()
-            console.log(`Container ${containerName} started successfully`)
+        await container.start()
+        console.log(`✅ Container ${containerName} started.`)
 
-            // Wait for container to initialize
-            await new Promise((resolve) => setTimeout(resolve, 10000))
+        // Wait for container to be fully started
+        await new Promise((resolve) => setTimeout(resolve, 2000))
 
-            // Verify SSH is running
-            try {
-                const exec = await container.exec({
-                    Cmd: ["/bin/bash", "-c", "ps aux | grep sshd | grep -v grep && netstat -tlnp | grep :22"],
-                    AttachStdout: true,
-                    AttachStderr: true,
-                })
-                await exec.start()
-                console.log(`SSH verification completed for ${containerName}`)
-            } catch (error) {
-                console.error("SSH verification failed:", error)
-            }
-
-            return container
-        } catch (error) {
-            console.error("Container creation error:", error)
-            throw error
+        // Confirm container is running before executing commands
+        const inspect = await container.inspect()
+        if (!inspect.State.Running) {
+            throw new Error("Container failed to stay running")
         }
+
+        // List of commands to run inside the container
+        const commands = [
+            "apt-get update",
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
+            "mkdir -p /var/run/sshd",
+            "useradd -m -s /bin/bash devuser",
+            `echo 'devuser:${actualPassword}' | chpasswd`,
+            "usermod -aG sudo devuser",
+            "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
+            `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
+            "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+            "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+            "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
+            "service ssh start",
+            "service nginx start"
+        ]
+
+        for (const cmd of commands) {
+            const execInstance = await container.exec({
+                Cmd: ["/bin/sh", "-c", cmd],
+                AttachStdout: true,
+                AttachStderr: true,
+            })
+            const stream = await execInstance.start()
+            await new Promise((resolve) => setTimeout(resolve, 300)) // delay between steps
+        }
+
+        return container
+    } catch (error) {
+        console.error("❌ Container creation error:", error)
+        throw error
     }
+}
+
 
     static async verifyAndFixPassword(containerId, password) {
         try {
