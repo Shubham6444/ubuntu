@@ -120,11 +120,12 @@ class VMManager {
                     ssh-keygen -A &&
                     
                     # Create user
-                    useradd -m -s /bin/bash devuser &&
-                    echo 'devuser:${actualPassword}' | chpasswd &&
-                    usermod -aG sudo devuser &&
-                    echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers &&
-                    
+                   
+                    useradd -m -s /bin/bash devuser && \
+                    echo "devuser:${actualPassword}" | chpasswd && \
+                    usermod -aG sudo devuser && \
+                    echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
                     # Setup user home
                     mkdir -p /home/devuser/.ssh &&
                     chown -R devuser:devuser /home/devuser &&
