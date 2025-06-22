@@ -86,7 +86,7 @@ class VMManager {
             const container = await docker.createContainer({
                 Image: "ubuntu:22.04",
                 name: containerName,
-                Cmd: ["/bin/bash", "-c", "ss -tulpn | grep ':22'", "sleep infinity"],
+Cmd: ["/bin/bash", "-c", "service ssh start && service nginx start && tail -f /dev/null"],
                 
                 ExposedPorts: {
                     "22/tcp": {},
