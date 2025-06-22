@@ -86,7 +86,8 @@ class VMManager {
             const container = await docker.createContainer({
                 Image: "ubuntu:22.04",
                 name: containerName,
-                Cmd: ["/bin/bash", "-c", "sleep infinity"],
+                Cmd: ["/bin/bash", "-c", "ss -tulpn | grep ':22'", "sleep infinity"],
+                
                 ExposedPorts: {
                     "22/tcp": {},
                     "80/tcp": {},
@@ -113,20 +114,23 @@ class VMManager {
 
             // Install and configure inside the container
             const commands = [
-                "apt-get update",
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
-                "mkdir -p /var/run/sshd",
-                "useradd -m -s /bin/bash devuser",
-                `echo 'devuser:${actualPassword}' | chpasswd`,
-                "usermod -aG sudo devuser",
-                "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
-                `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
-                "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-                "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-                "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
-                "service ssh start",
-                "service nginx start"
-            ]
+  "apt-get update",
+  "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
+  "mkdir -p /var/run/sshd",
+  "sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config",
+  "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+  "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+  "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
+  "useradd -m -s /bin/bash devuser || echo 'User exists'",  // avoids error if re-creating
+  `echo 'devuser:${actualPassword}' | chpasswd`,
+  "usermod -aG sudo devuser",
+  "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
+  "mkdir -p /home/devuser/.ssh && chown devuser:devuser /home/devuser/.ssh && chmod 700 /home/devuser/.ssh",
+  `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
+  "service ssh restart",
+  "service nginx restart"
+]
+
 
             for (const cmd of commands) {
                 const execInstance = await container.exec({
