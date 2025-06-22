@@ -1,4 +1,3 @@
-
 const express = require("express")
 const session = require("express-session")
 const bcrypt = require("bcrypt")
@@ -79,125 +78,72 @@ class VMManager {
         await fs.ensureDir(path.dirname(CONFIG.DATA_FILE))
         await fs.writeJson(CONFIG.DATA_FILE, data, { spaces: 2 })
     }
+static async createContainer(userId, password, sshPort, httpPort) {
+    const containerName = `vm_${userId}`
+    const actualPassword = password?.trim() || "ubuntupass"
 
-    static async createContainer(userId, password, sshPort, httpPort) {
-        const containerName = `vm_${userId}`
-        const actualPassword = password?.trim() || "ubuntupass"
+    try {
+        const container = await docker.createContainer({
+            Image: "ubuntu:22.04",
+            name: containerName,
+            Cmd: ["/bin/bash", "-c", "sleep infinity"],
+            ExposedPorts: {
+                "22/tcp": {},
+                "80/tcp": {},
+            },
+            HostConfig: {
+                PortBindings: {
+                    "22/tcp": [{ HostPort: sshPort.toString() }],
+                    "80/tcp": [{ HostPort: httpPort.toString() }],
+                },
+                Privileged: true,
+                Binds: ["/:/host", "/var/run/docker.sock:/var/run/docker.sock"],
+                Memory: 512 * 1024 * 1024,
+                CpuShares: 512,
+            },
+            Tty: true,
+            OpenStdin: true,
+        })
 
-        try {
-            const container = await docker.createContainer({
-                Image: "ubuntu:22.04",
-                name: containerName,
-                Cmd: ["/bin/sh", "-c", "tail -f /dev/null"], // Reliable command to keep container alive
-                ExposedPorts: {
-                    "22/tcp": {},
-                    "80/tcp": {},
-                },
-                HostConfig: {
-                    PortBindings: {
-                        "22/tcp": [{ HostPort: sshPort.toString() }],
-                        "80/tcp": [{ HostPort: httpPort.toString() }],
-                    },
-                    Privileged: true,
-                    Binds: ["/:/host", "/var/run/docker.sock:/var/run/docker.sock"],
-                    Memory: 512 * 1024 * 1024,
-                    CpuShares: 512,
-                },
-                Tty: true,
-                OpenStdin: true,
+        await container.start()
+        console.log(`Container ${containerName} started.`)
+
+        // Wait a bit to stabilize
+        await new Promise((r) => setTimeout(r, 3000))
+
+        // Install and configure inside the container
+        const commands = [
+            "apt-get update",
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
+            "mkdir -p /var/run/sshd",
+            "useradd -m -s /bin/bash devuser",
+            `echo 'devuser:${actualPassword}' | chpasswd`,
+            "usermod -aG sudo devuser",
+            "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
+            `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
+            "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+            "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+            "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
+            "service ssh start",
+            "service nginx start"
+        ]
+
+        for (const cmd of commands) {
+            const execInstance = await container.exec({
+                Cmd: ["/bin/bash", "-c", cmd],
+                AttachStdout: true,
+                AttachStderr: true,
             })
-
-            await container.start()
-            console.log(`✅ Container ${containerName} started.`)
-
-            // Wait for container to be fully started
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-
-            // Confirm container is running before executing commands
-            const inspect = await container.inspect()
-            if (!inspect.State.Running) {
-                throw new Error("Container failed to stay running")
-            }
-
-            // List of commands to run inside the container
-            const commands = [
-                "apt-get update",
-                "DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo nginx curl",
-                "mkdir -p /var/run/sshd",
-                "useradd -m -s /bin/bash devuser",
-                `echo 'devuser:${actualPassword}' | chpasswd`,
-                "usermod -aG sudo devuser",
-                "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
-                `echo '<h1>Welcome to your VM!</h1><p>User: devuser</p>' > /var/www/html/index.html`,
-                "sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-                "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-                "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
-                "service ssh start",
-                "service nginx start"
-            ]
-
-            for (const cmd of commands) {
-                const execInstance = await container.exec({
-                    Cmd: ["/bin/sh", "-c", cmd],
-                    AttachStdout: true,
-                    AttachStderr: true,
-                })
-                const stream = await execInstance.start()
-                await new Promise((resolve) => setTimeout(resolve, 300)) // delay between steps
-            }
-
-            return container
-        } catch (error) {
-            console.error("❌ Container creation error:", error)
-            throw error
+            const stream = await execInstance.start()
+            await new Promise((resolve) => setTimeout(resolve, 300))
         }
+
+        return container
+    } catch (error) {
+        console.error("Container creation error:", error)
+        throw error
     }
-
-
-    static async verifyAndFixPassword(containerId, password) {
-        try {
-            const container = docker.getContainer(containerId)
-
-            // Wait for container to be fully ready
-            await new Promise((resolve) => setTimeout(resolve, 5000))
-
-            const commands = [
-                // Ensure password is set
-                `echo 'devuser:${password}' | chpasswd`,
-
-                // Restart SSH service to ensure it's running
-                "pkill sshd || true",
-                "/usr/sbin/sshd -D &",
-
-                // Verify SSH is listening
-                "sleep 2 && netstat -tlnp | grep :22",
-
-                // Test user can authenticate
-                `su - devuser -c 'whoami'`,
-            ]
-
-            for (const cmd of commands) {
-                try {
-                    const exec = await container.exec({
-                        Cmd: ["/bin/bash", "-c", cmd],
-                        AttachStdout: true,
-                        AttachStderr: true,
-                    })
-                    await exec.start()
-                    console.log(`Executed: ${cmd}`)
-                    await new Promise((resolve) => setTimeout(resolve, 1000))
-                } catch (error) {
-                    console.error(`Error executing: ${cmd}`, error)
-                }
-            }
-
-            console.log("Password verification completed")
-            return true
-        } catch (error) {
-            console.error("Password verification error:", error)
-            return false
-        }
-    }
+}
 
     static async generateNginxConfig(userId, httpPort, subdomain) {
         const configContent = `
@@ -247,63 +193,6 @@ server {
             await execAsync("systemctl reload nginx")
         } catch (error) {
             console.error("Nginx config removal error:", error)
-        }
-    }
-
-    static async fixContainerPassword(containerId, password) {
-        try {
-            const container = docker.getContainer(containerId)
-
-            // Wait a bit more for container to be fully ready
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-
-            const commands = [
-                // Ensure user exists
-                "id devuser || useradd -m -s /bin/bash devuser",
-
-                // Set password multiple times to ensure it sticks
-                `echo 'devuser:${password}' | chpasswd`,
-                `passwd devuser <<EOF
-${password}
-${password}
-EOF`,
-
-                // Ensure sudo access
-                "usermod -aG sudo devuser",
-                "echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers",
-
-                // Fix SSH config again
-                "sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-                "sed -i 's/#PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config",
-                "sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config",
-
-                // Restart SSH
-                "service ssh restart",
-
-                // Test the password
-                `su - devuser -c 'echo "Password test successful"'`,
-            ]
-
-            for (const cmd of commands) {
-                try {
-                    const exec = await container.exec({
-                        Cmd: ["/bin/bash", "-c", cmd],
-                        AttachStdout: true,
-                        AttachStderr: true,
-                    })
-
-                    await exec.start()
-                    await new Promise((resolve) => setTimeout(resolve, 300))
-                } catch (error) {
-                    console.error(`Error in verification command: ${cmd}`, error)
-                }
-            }
-
-            console.log("Password verification and fix completed")
-            return true
-        } catch (error) {
-            console.error("Password verification error:", error)
-            return false
         }
     }
 }
@@ -410,13 +299,6 @@ app.post("/api/create-vm", requireAuth, async (req, res) => {
         // Create container
         const container = await VMManager.createContainer(userId, vmPassword, sshPort, httpPort)
 
-        // Wait and verify password is set correctly
-        console.log("Waiting for container setup to complete...")
-        await new Promise((resolve) => setTimeout(resolve, 5000))
-
-        // Verify and fix password
-        await VMManager.verifyAndFixPassword(container.id, vmPassword)
-
         // Generate Nginx config
         await VMManager.generateNginxConfig(userId, httpPort, subdomain)
 
@@ -518,98 +400,11 @@ app.post("/api/vm-action", requireAuth, async (req, res) => {
     }
 })
 
-app.post("/api/fix-vm-password", requireAuth, async (req, res) => {
-    try {
-        const { newPassword } = req.body
-        const userId = req.session.userId.toString()
-        const vmData = await VMManager.loadVMData()
-        const userVM = vmData[userId]
-
-        if (!userVM) {
-            return res.status(404).json({ error: "VM not found" })
-        }
-
-        if (!newPassword) {
-            return res.status(400).json({ error: "New password is required" })
-        }
-
-        // Fix the password in the container
-        await VMManager.fixContainerPassword(userVM.containerId, newPassword)
-
-        res.json({
-            success: true,
-            message: "Password updated successfully. Try SSH again.",
-        })
-    } catch (error) {
-        console.error("Password fix error:", error)
-        res.status(500).json({ error: "Failed to fix password: " + error.message })
-    }
-})
-
 app.get("/api/user", requireAuth, (req, res) => {
     res.json({
         userId: req.session.userId,
         username: req.session.username,
     })
-})
-
-app.get("/api/debug-vm", requireAuth, async (req, res) => {
-    try {
-        const userId = req.session.userId.toString()
-        const vmData = await VMManager.loadVMData()
-        const userVM = vmData[userId]
-
-        if (!userVM) {
-            return res.status(404).json({ error: "VM not found" })
-        }
-
-        const container = docker.getContainer(userVM.containerId)
-
-        // Get container info
-        const info = await container.inspect()
-
-        // Execute debug commands
-        const debugCommands = [
-            "whoami",
-            "pwd",
-            "ls -la /home/devuser",
-            "cat /etc/passwd | grep devuser",
-            "service ssh status",
-            "ps aux | grep ssh",
-            "netstat -tlnp | grep :22",
-        ]
-
-        const debugResults = {}
-
-        for (const cmd of debugCommands) {
-            try {
-                const exec = await container.exec({
-                    Cmd: ["/bin/bash", "-c", cmd],
-                    AttachStdout: true,
-                    AttachStderr: true,
-                })
-
-                const stream = await exec.start()
-                debugResults[cmd] = "executed"
-            } catch (error) {
-                debugResults[cmd] = `error: ${error.message}`
-            }
-        }
-
-        res.json({
-            success: true,
-            containerInfo: {
-                id: info.Id,
-                state: info.State,
-                config: info.Config,
-            },
-            debugResults,
-            vm: userVM,
-        })
-    } catch (error) {
-        console.error("Debug error:", error)
-        res.status(500).json({ error: "Failed to debug VM: " + error.message })
-    }
 })
 
 // Serve static files
