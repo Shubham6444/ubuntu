@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VM Dashboard - VM Provisioning Platform</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>🖥️ VM Dashboard</h1>
+                <div class="user-info">
+                    <span id="username"></span>
+                    <button onclick="logout()" class="btn btn-secondary">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="dashboard-content">
+            <!-- No VM State -->
+            <div id="noVMState" class="vm-state">
+                <div class="create-vm-container">
+                    <h2>Create Your VM</h2>
+                    <p>You don't have a VM yet. Create one to get started!</p>
+
+                    <form id="createVMForm" class="create-vm-form">
+                        <div class="form-group">
+                            <label for="vmPassword">VM Password (for SSH access)</label>
+                            <input type="password" id="vmPassword" name="vmPassword" required
+                                placeholder="Enter a secure password">
+                            <small>This will be the password for the 'devuser' account</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="customDomain">Custom Subdomain (optional)</label>
+                            <input type="text" id="customDomain" name="customDomain"
+                                placeholder="e.g., myapp (will become myapp.yourdomain.com)">
+                            <small>Leave empty for auto-generated subdomain</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="btn-text">Create VM</span>
+                            <span class="btn-loading" style="display: none;">Creating...</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- VM Exists State -->
+            <div id="hasVMState" class="vm-state" style="display: none;">
+                <div class="vm-info-card">
+                    <div class="vm-header">
+                        <h2>Your VM</h2>
+                        <div class="vm-status">
+                            <span id="vmStatus" class="status-badge">Loading...</span>
+                        </div>
+                    </div>
+
+                    <div class="vm-details">
+                        <div class="detail-group">
+                            <h3>🌐 Web Access</h3>
+                            <div class="detail-item">
+                                <label>Domain:</label>
+                                <span id="vmDomain" class="copyable"></span>
+                                <button onclick="copyToClipboard('vmDomain')" class="btn-copy">📋</button>
+                            </div>
+                        </div>
+
+                        <div class="detail-group">
+                            <h3>🔐 SSH Access</h3>
+                            <div class="detail-item">
+                                <label>Command:</label>
+                                <code id="sshCommand" class="copyable"></code>
+                                <button onclick="copyToClipboard('sshCommand')" class="btn-copy">📋</button>
+                            </div>
+                            <div class="detail-item">
+                                <label>Port:</label>
+                                <span id="sshPort"></span>
+                            </div>
+                        </div>
+
+                        <div class="detail-group">
+                            <h3>📊 VM Information</h3>
+                            <div class="detail-item">
+                                <label>Container:</label>
+                                <span id="containerName"></span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Created:</label>
+                                <span id="createdAt"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="vm-actions">
+                        <button onclick="performVMAction('start')" class="btn btn-success" id="startBtn">
+                            ▶️ Start
+                        </button>
+                        <button onclick="performVMAction('stop')" class="btn btn-warning" id="stopBtn">
+                            ⏹️ Stop
+                        </button>
+                        <button onclick="performVMAction('restart')" class="btn btn-info" id="restartBtn">
+                            🔄 Restart
+                        </button>
+                        <button onclick="performVMAction('remove')" class="btn btn-danger" id="removeBtn">
+                            🗑️ Remove
+                        </button>
+                    </div>
+                </div>
+
+                <div class="vm-instructions">
+                    <h3>📝 Getting Started</h3>
+                    <div class="instruction-grid">
+                        <div class="instruction-card">
+                            <h4>1. SSH Access</h4>
+                            <p>Use the SSH command above to connect to your VM. Username is <code>devuser</code> with
+                                the password you set.</p>
+                        </div>
+                        <div class="instruction-card">
+                            <h4>2. Web Access</h4>
+                            <p>Your VM has Nginx running. Visit your domain to see the default page or deploy your own
+                                content.</p>
+                        </div>
+                        <div class="instruction-card">
+                            <h4>3. Development</h4>
+                            <p>Your VM comes with Node.js, npm, and other development tools pre-installed.</p>
+                        </div>
+                        <div class="instruction-card">
+                            <h4>4. File Management</h4>
+                            <p>Use SCP or SFTP to transfer files:
+                                <code>scp -P [port] file.txt devuser@yourdomain.com:~/</code></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script >let currentVM = null
+
+// Check authentication and load user data
+async function checkAuth() {
+    try {
+        const response = await fetch("/api/user")
+        if (!response.ok) {
+            window.location.href = "/"
+            return
+        }
+
+        const user = await response.json()
+        document.getElementById("username").textContent = user.username
+
+        // Load VM status
+        loadVMStatus()
+    } catch (error) {
+        window.location.href = "/"
+    }
+}
+
+// Load VM status
+async function loadVMStatus() {
+    try {
+        const response = await fetch("/api/vm-status")
+        const result = await response.json()
+
+        if (result.hasVM) {
+            currentVM = result.vm
+            showVMState()
+            updateVMDisplay()
+        } else {
+            showNoVMState()
+        }
+    } catch (error) {
+        showNotification("Failed to load VM status", "error")
+    }
+}
+
+// Show/hide VM states
+function showVMState() {
+    document.getElementById("noVMState").style.display = "none"
+    document.getElementById("hasVMState").style.display = "block"
+}
+
+function showNoVMState() {
+    document.getElementById("noVMState").style.display = "block"
+    document.getElementById("hasVMState").style.display = "none"
+}
+
+// Update VM display with current data
+function updateVMDisplay() {
+    if (!currentVM) return
+
+    // Update status badge
+    const statusBadge = document.getElementById("vmStatus")
+    statusBadge.textContent = currentVM.status
+    statusBadge.className = `status-badge ${currentVM.status}`
+
+    // Update VM details
+    document.getElementById("vmDomain").textContent = `https://${currentVM.domain}`
+    document.getElementById("sshCommand").textContent = `ssh -p ${currentVM.sshPort} devuser@yourdomain.com`
+    document.getElementById("sshPort").textContent = currentVM.sshPort
+    document.getElementById("containerName").textContent = currentVM.containerName
+    document.getElementById("createdAt").textContent = new Date(currentVM.createdAt).toLocaleString()
+
+    // Update action buttons based on status
+    updateActionButtons()
+}
+
+// Update action buttons based on VM status
+function updateActionButtons() {
+    const startBtn = document.getElementById("startBtn")
+    const stopBtn = document.getElementById("stopBtn")
+    const restartBtn = document.getElementById("restartBtn")
+    const removeBtn = document.getElementById("removeBtn")
+
+    if (currentVM.status === "running") {
+        startBtn.disabled = true
+        stopBtn.disabled = false
+        restartBtn.disabled = false
+    } else if (currentVM.status === "stopped") {
+        startBtn.disabled = false
+        stopBtn.disabled = true
+        restartBtn.disabled = false
+    } else {
+        startBtn.disabled = true
+        stopBtn.disabled = true
+        restartBtn.disabled = true
+    }
+
+    removeBtn.disabled = false
+}
+
+// Handle VM creation
+document.getElementById("createVMForm").addEventListener("submit", async (e) => {
+    e.preventDefault()
+
+    const submitBtn = e.target.querySelector('button[type="submit"]')
+    submitBtn.classList.add("loading")
+    submitBtn.disabled = true
+
+    const formData = new FormData(e.target)
+    const data = Object.fromEntries(formData)
+
+    try {
+        const response = await fetch("/api/create-vm", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+        })
+
+        const result = await response.json()
+
+        if (result.success) {
+            currentVM = result.vm
+            showNotification("VM created successfully!", "success")
+            showVMState()
+            updateVMDisplay()
+        } else {
+            showNotification(result.error || "Failed to create VM", "error")
+        }
+    } catch (error) {
+        showNotification("Network error. Please try again.", "error")
+    } finally {
+        submitBtn.classList.remove("loading")
+        submitBtn.disabled = false
+    }
+})
+
+// Perform VM actions
+async function performVMAction(action) {
+    const actionBtn = document.getElementById(`${action}Btn`)
+    const originalText = actionBtn.textContent
+
+    actionBtn.disabled = true
+    actionBtn.textContent = "Processing..."
+
+    try {
+        const response = await fetch("/api/vm-action", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ action }),
+        })
+
+        const result = await response.json()
+
+        if (result.success) {
+            if (action === "remove") {
+                showNotification("VM removed successfully!", "success")
+                showNoVMState()
+                currentVM = null
+            } else {
+                currentVM = result.vm
+                updateVMDisplay()
+                showNotification(`VM ${action} completed successfully!`, "success")
+            }
+        } else {
+            showNotification(result.error || `Failed to ${action} VM`, "error")
+        }
+    } catch (error) {
+        showNotification("Network error. Please try again.", "error")
+    } finally {
+        actionBtn.disabled = false
+        actionBtn.textContent = originalText
+    }
+}
+
+// Copy to clipboard function
+async function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId)
+    const text = element.textContent
+
+    try {
+        await navigator.clipboard.writeText(text)
+        showNotification("Copied to clipboard!", "success")
+    } catch (error) {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea")
+        textArea.value = text
+        document.body.appendChild(textArea)
+        textArea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textArea)
+        showNotification("Copied to clipboard!", "success")
+    }
+}
+
+// Logout function
+async function logout() {
+    try {
+        await fetch("/api/logout", { method: "POST" })
+        window.location.href = "/"
+    } catch (error) {
+        window.location.href = "/"
+    }
+}
+
+// Notification function
+function showNotification(message, type = "info") {
+    const notification = document.getElementById("notification")
+    notification.textContent = message
+    notification.className = `notification ${type}`
+    notification.classList.add("show")
+
+    setTimeout(() => {
+        notification.classList.remove("show")
+    }, 4000)
+}
+
+// Auto-refresh VM status every 30 seconds
+setInterval(() => {
+    if (currentVM) {
+        loadVMStatus()
+    }
+}, 30000)
+
+// Initialize dashboard
+checkAuth()
+</script>
+</body>
+
+</html>
