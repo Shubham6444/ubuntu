@@ -20,8 +20,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Certbot via Snap (recommended by Let's Encrypt)
+# Install Certbot from default Ubuntu 22.04 repo
 RUN apt-get update && apt-get install -y \
-    software-properties-common && \
+    certbot python3-certbot-nginx
     add-apt-repository ppa:certbot/certbot -y && \
     apt-get update && apt-get install -y \
     certbot python3-certbot-nginx
