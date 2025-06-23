@@ -21,6 +21,7 @@ const CONFIG = {
   DB_NAME: "vm_platform",
   SSH_PORT_START: 2201,
   HTTP_PORT_START: 8001,
+  RDP_PORT_START: 3390,
   DOMAIN: "remixorbit.in",
   NGINX_CONFIG_PATH: "/etc/nginx/sites-available",
   NGINX_ENABLED_PATH: "/etc/nginx/sites-enabled",
@@ -59,7 +60,7 @@ class VMManager {
 
   let sshPort = CONFIG.SSH_PORT_START
   let httpPort = CONFIG.HTTP_PORT_START
-  let rdpPort = 3389  // start from 3389 or higher
+  let rdpPort = CONFIG.RDP_PORT_START  // start from 3389 or higher
 
   while (usedSSHPorts.includes(sshPort)) sshPort++
   while (usedHTTPPorts.includes(httpPort)) httpPort++
@@ -437,7 +438,6 @@ app.post("/api/create-vm", requireAuth, async (req, res) => {
       containerName: `vm_${userId}`,
       sshPort,
       httpPort,
-      rdpPort,
       subdomain,
       domain: `${subdomain}.${CONFIG.DOMAIN}`,
       createdAt: new Date().toISOString(),
