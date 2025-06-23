@@ -35,12 +35,14 @@ RUN mkdir -p /var/run/sshd && \
     sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config
 
 # Create devuser and give sudo access
- RUN groupadd ssl-cert && \
+ # Create devuser and give sudo + ssl-cert access (safely)
+RUN getent group ssl-cert || groupadd ssl-cert && \
     useradd -m -s /bin/bash devuser && \
     echo 'devuser:ubuntupass' | chpasswd && \
     usermod -aG sudo,ssl-cert devuser && \
     echo 'devuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/devuser && \
     chmod 0440 /etc/sudoers.d/devuser
+
 
 
 # Setup default Nginx web page and ACME challenge folder
