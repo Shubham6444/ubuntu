@@ -149,11 +149,16 @@ class VMManager {
         ExposedPorts: {
           "22/tcp": {},
           "80/tcp": {},
+          "3389/tcp": {},
+
+          
         },
         HostConfig: {
           PortBindings: {
             "22/tcp": [{ HostPort: sshPort.toString() }],
             "80/tcp": [{ HostPort: httpPort.toString() }],
+            "3389/tcp": [{ HostPort: rdpPort.toString() }],
+
           },
           Memory: 512 * 1024 * 1024, // 512MB
           CpuShares: 512,
