@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system packages
+# Install all necessary packages
 RUN apt-get update && apt-get install -y \
     openssh-server \
     sudo \
@@ -16,15 +16,10 @@ RUN apt-get update && apt-get install -y \
     vim \
     htop \
     net-tools \
-    snapd \
+    certbot \
+    python3-certbot-nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Certbot via Snap (recommended by Let's Encrypt)
-# Install Certbot from default Ubuntu 22.04 repo
-RUN apt-get update && apt-get install -y \
-    certbot python3-certbot-nginx
-    apt-get update && apt-get install -y \
-    certbot python3-certbot-nginx
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
@@ -40,15 +35,14 @@ RUN useradd -m -s /bin/bash devuser && \
     chmod 0440 /etc/sudoers.d/devuser && \
     adduser devuser ssl-cert
 
-
-# Setup default Nginx page and ACME challenge directory
+# Setup default Nginx web page and ACME challenge folder
 RUN mkdir -p /var/www/html/.well-known/acme-challenge && \
-    echo '<h1>Welcome to your VM!</h1><p>Container is running!</p>' > /var/www/html/index.html
+    echo '<h1>Welcome to your VM!</h1><p>Nginx and SSH running!</p>' > /var/www/html/index.html
 
 # Expose required ports
-EXPOSE 22 80 443 3389
+EXPOSE 22 80 443
 
-# Start services and keep the container running
+# Start SSH and Nginx services
 CMD service ssh start && \
-    service nginx start && \  
+    service nginx start && \
     tail -f /dev/null
