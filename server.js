@@ -90,11 +90,13 @@ class VMManager {
     const actualPassword = password?.trim() || "defaultpass123"
 
     console.log(`Creating container ${containerName} with SSH port ${sshPort}`)
-const userVolumePath = `/users/${userId}`
+    const userVolumePath = `/users/${userId}`
 
-await fs.ensureDir(`${userVolumePath}/etc/letsencrypt`)
-await fs.ensureDir(`${userVolumePath}/var/lib/letsencrypt`)
-await fs.ensureDir(`${userVolumePath}/var/www/html`)
+    await fs.ensureDir(`${userVolumePath}/etc/letsencrypt`)
+    await fs.ensureDir(`${userVolumePath}/var/lib/letsencrypt`)
+    await fs.ensureDir(`${userVolumePath}/var/www/html`)
+    await execAsync(`chown -R root:root ${userVolumePath}`)
+    await execAsync(`chmod -R 500 ${userVolumePath}`)
 
 
     try {
@@ -172,10 +174,10 @@ await fs.ensureDir(`${userVolumePath}/var/www/html`)
 
           },
           Binds: [
-      `${userVolumePath}/etc/letsencrypt:/etc/letsencrypt`,
-      `${userVolumePath}/var/lib/letsencrypt:/var/lib/letsencrypt`,
-      `${userVolumePath}/var/www/html:/var/www/html`,
-    ],
+            `${userVolumePath}/etc/letsencrypt:/etc/letsencrypt`,
+            `${userVolumePath}/var/lib/letsencrypt:/var/lib/letsencrypt`,
+            `${userVolumePath}/var/www/html:/var/www/html`,
+          ],
 
           Memory: 512 * 1024 * 1024, // 512MB
           CpuShares: 512,
