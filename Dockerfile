@@ -20,10 +20,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Certbot via Snap (recommended by Let's Encrypt)
-RUN snap install core && snap refresh core && \
-    snap install --classic certbot && \
-    ln -s /snap/bin/certbot /usr/bin/certbot
-
+apt-get update && apt-get install -y \
+    software-properties-common && \
+    add-apt-repository ppa:certbot/certbot -y && \
+    apt-get update && apt-get install -y \
+    certbot python3-certbot-nginx
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
