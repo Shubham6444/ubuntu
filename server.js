@@ -120,10 +120,14 @@ class VMManager {
                     ssh-keygen -A &&
                     
                     # Create user
-                   
-                    useradd -m -s /bin/bash devuser 
-                    echo "devuser:${actualPassword}" | chpasswd 
-                    usermod -aG sudo devuser
+                    useradd -m -s /bin/bash devuser &&
+                    echo 'devuser:${actualPassword}' | chpasswd &&
+                    usermod -aG sudo devuser &&
+                    echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers &&
+                    
+                    useradd -m -s /bin/bash devuser && \
+                    echo "devuser:${actualPassword}" | chpasswd && \
+                    usermod -aG sudo devuser && \
                     echo 'devuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
                     # Setup user home
@@ -181,7 +185,7 @@ class VMManager {
       // Double-check password is set
       try {
         const passwordExec = await container.exec({
-          Cmd: ["/bin/bash", "-c", `echo "devuser:${actualPassword}" | chpasswd && echo "Password reset completed"`],
+          Cmd: ["/bin/bash", "-c", `echo 'devuser:${actualPassword}' | chpasswd && echo "Password reset completed"`],
           AttachStdout: true,
           AttachStderr: true,
         })
@@ -271,7 +275,7 @@ server {
         "id devuser || useradd -m -s /bin/bash devuser",
 
         // Set password
-        `echo "devuser:${actualPassword}" | chpasswd`,
+        `echo 'devuser:${actualPassword}' | chpasswd`,
 
         // Ensure sudo access
         "usermod -aG sudo devuser",
