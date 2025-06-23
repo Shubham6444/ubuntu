@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install all necessary packages
+# Install system packages
 RUN apt-get update && apt-get install -y \
     openssh-server \
     sudo \
@@ -16,10 +16,13 @@ RUN apt-get update && apt-get install -y \
     vim \
     htop \
     net-tools \
-    xrdp \
-    xfce4 xfce4-goodies \
-    dbus-x11 x11-xserver-utils \
+    snapd \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Certbot via Snap (recommended by Let's Encrypt)
+RUN snap install core && snap refresh core && \
+    snap install --classic certbot && \
+    ln -s /snap/bin/certbot /usr/bin/certbot
 
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
@@ -36,20 +39,15 @@ RUN useradd -m -s /bin/bash devuser && \
     chmod 0440 /etc/sudoers.d/devuser && \
     adduser devuser ssl-cert
 
-# Configure XRDP to use XFCE
-RUN echo "startxfce4" > /home/devuser/.xsession && \
-    chown devuser:devuser /home/devuser/.xsession && \
-    chmod +x /home/devuser/.xsession
 
-# Welcome HTML for Nginx
-RUN echo '<h1>Welcome to your VM!</h1><p>Container is running!</p>' > /var/www/html/index.html
+# Setup default Nginx page and ACME challenge directory
+RUN mkdir -p /var/www/html/.well-known/acme-challenge && \
+    echo '<h1>Welcome to your VM!</h1><p>Container is running!</p>' > /var/www/html/index.html
 
-# Enable xrdp on port 3389
-EXPOSE 22 80 3389
+# Expose required ports
+EXPOSE 22 80 443 3389
 
-# Start all services
+# Start services and keep the container running
 CMD service ssh start && \
-    service nginx start && \
-    service xrdp-sesman start && \
-    service xrdp start && \
+    service nginx start && \  
     tail -f /dev/null

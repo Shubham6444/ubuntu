@@ -52,22 +52,22 @@ MongoClient.connect(CONFIG.MONGODB_URL)
 
 // Utility functions
 class VMManager {
- static async getNextAvailablePorts() {
-  const data = await this.loadVMData()
-  const usedSSHPorts = Object.values(data).map((vm) => vm.sshPort)
-  const usedHTTPPorts = Object.values(data).map((vm) => vm.httpPort)
-  const usedRDPPorts = Object.values(data).map((vm) => vm.rdpPort)
+  static async getNextAvailablePorts() {
+    const data = await this.loadVMData()
+    const usedSSHPorts = Object.values(data).map((vm) => vm.sshPort)
+    const usedHTTPPorts = Object.values(data).map((vm) => vm.httpPort)
+    const usedRDPPorts = Object.values(data).map((vm) => vm.rdpPort)
 
-  let sshPort = CONFIG.SSH_PORT_START
-  let httpPort = CONFIG.HTTP_PORT_START
-  let rdpPort = CONFIG.RDP_PORT_START  // start from 3389 or higher
+    let sshPort = CONFIG.SSH_PORT_START
+    let httpPort = CONFIG.HTTP_PORT_START
+    let rdpPort = CONFIG.RDP_PORT_START  // start from 3389 or higher
 
-  while (usedSSHPorts.includes(sshPort)) sshPort++
-  while (usedHTTPPorts.includes(httpPort)) httpPort++
-  while (usedRDPPorts.includes(rdpPort)) rdpPort++
+    while (usedSSHPorts.includes(sshPort)) sshPort++
+    while (usedHTTPPorts.includes(httpPort)) httpPort++
+    while (usedRDPPorts.includes(rdpPort)) rdpPort++
 
-  return { sshPort, httpPort, rdpPort }
-}
+    return { sshPort, httpPort, rdpPort }
+  }
 
 
   static async loadVMData() {
@@ -85,7 +85,7 @@ class VMManager {
     await fs.writeJson(CONFIG.DATA_FILE, data, { spaces: 2 })
   }
 
-  static async createContainer(userId, password, sshPort, httpPort,rdpPort) {
+  static async createContainer(userId, password, sshPort, httpPort, rdpPort) {
     const containerName = `vm_${userId}`
     const actualPassword = password?.trim() || "defaultpass123"
 
@@ -156,7 +156,7 @@ class VMManager {
           "80/tcp": {},
           "3389/tcp": {},
 
-          
+
         },
         HostConfig: {
           PortBindings: {
@@ -417,7 +417,7 @@ app.post("/api/create-vm", requireAuth, async (req, res) => {
     }
 
     // Get available ports
-    const { sshPort, httpPort,rdpPort } = await VMManager.getNextAvailablePorts()
+    const { sshPort, httpPort, rdpPort } = await VMManager.getNextAvailablePorts()
     console.log(`Assigned ports - SSH: ${sshPort}, HTTP: ${httpPort}`)
 
     // Generate subdomain
@@ -426,7 +426,7 @@ app.post("/api/create-vm", requireAuth, async (req, res) => {
 
     // Create container
     console.log("Starting container creation...")
-    const container = await VMManager.createContainer(userId, vmPassword, sshPort, httpPort,rdpPort)
+    const container = await VMManager.createContainer(userId, vmPassword, sshPort, httpPort, rdpPort)
 
     // Generate Nginx config
     console.log("Generating Nginx configuration...")
