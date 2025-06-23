@@ -20,6 +20,13 @@ RUN apt-get update && apt-get install -y \
     python3-certbot-nginx \
     && rm -rf /var/lib/apt/lists/*
 
+    RUN groupadd ssl-cert && \
+    useradd -m -s /bin/bash devuser && \
+    echo 'devuser:ubuntupass' | chpasswd && \
+    usermod -aG sudo,ssl-cert devuser && \
+    echo 'devuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/devuser && \
+    chmod 0440 /etc/sudoers.d/devuser
+
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
@@ -28,12 +35,13 @@ RUN mkdir -p /var/run/sshd && \
     sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config
 
 # Create devuser and give sudo access
-RUN useradd -m -s /bin/bash devuser && \
+ RUN groupadd ssl-cert && \
+    useradd -m -s /bin/bash devuser && \
     echo 'devuser:ubuntupass' | chpasswd && \
-    usermod -aG sudo devuser && \
+    usermod -aG sudo,ssl-cert devuser && \
     echo 'devuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/devuser && \
-    chmod 0440 /etc/sudoers.d/devuser && \
-    adduser devuser ssl-cert
+    chmod 0440 /etc/sudoers.d/devuser
+
 
 # Setup default Nginx web page and ACME challenge folder
 RUN mkdir -p /var/www/html/.well-known/acme-challenge && \
