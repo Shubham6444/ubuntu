@@ -23,7 +23,6 @@ RUN apt-get update && apt-get install -y \
 # Install Certbot from default Ubuntu 22.04 repo
 RUN apt-get update && apt-get install -y \
     certbot python3-certbot-nginx
-    add-apt-repository ppa:certbot/certbot -y && \
     apt-get update && apt-get install -y \
     certbot python3-certbot-nginx
 # Configure SSH
