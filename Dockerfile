@@ -20,12 +20,18 @@ RUN apt-get update && apt-get install -y \
     python3-certbot-nginx \
     && rm -rf /var/lib/apt/lists/*
 
-    RUN groupadd ssl-cert && \
-    useradd -m -s /bin/bash devuser && \
-    echo 'devuser:ubuntupass' | chpasswd && \
+   # Create ssl-cert group only if not exists
+RUN getent group ssl-cert || groupadd ssl-cert
+
+# Create devuser only if not exists
+RUN id -u devuser || useradd -m -s /bin/bash devuser
+
+# Set password, sudo, and group settings
+RUN echo 'devuser:ubuntupass' | chpasswd && \
     usermod -aG sudo,ssl-cert devuser && \
     echo 'devuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/devuser && \
     chmod 0440 /etc/sudoers.d/devuser
+
 
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
@@ -36,12 +42,13 @@ RUN mkdir -p /var/run/sshd && \
 
 # Create devuser and give sudo access
  # Create devuser and give sudo + ssl-cert access (safely)
-RUN getent group ssl-cert || groupadd ssl-cert && \
-    useradd -m -s /bin/bash devuser && \
-    echo 'devuser:ubuntupass' | chpasswd && \
-    usermod -aG sudo,ssl-cert devuser && \
-    echo 'devuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/devuser && \
-    chmod 0440 /etc/sudoers.d/devuser
+RUN getent group ssl-cert || groupadd ssl-cert
+RUN id -u devuser || useradd -m -s /bin/bash devuser
+RUN echo 'devuser:ubuntupass' | chpasswd
+RUN usermod -aG sudo,ssl-cert devuser
+RUN echo 'devuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/devuser
+RUN chmod 0440 /etc/sudoers.d/devuser
+
 
 
 
