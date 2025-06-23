@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Certbot via Snap (recommended by Let's Encrypt)
-apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y \
     software-properties-common && \
     add-apt-repository ppa:certbot/certbot -y && \
     apt-get update && apt-get install -y \
