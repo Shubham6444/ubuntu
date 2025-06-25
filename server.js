@@ -52,22 +52,37 @@ MongoClient.connect(CONFIG.MONGODB_URL)
 
 // Utility functions
 class VMManager {
-  static async getNextAvailablePorts() {
-    const data = await this.loadVMData()
-    const usedSSHPorts = Object.values(data).map((vm) => vm.sshPort)
-    const usedHTTPPorts = Object.values(data).map((vm) => vm.httpPort)
-    const usedRDPPorts = Object.values(data).map((vm) => vm.rdpPort)
+static async getNextAvailablePorts() {
+  const data = await this.loadVMData()
 
-    let sshPort = CONFIG.SSH_PORT_START
-    let httpPort = CONFIG.HTTP_PORT_START
-    let rdpPort = CONFIG.RDP_PORT_START  // start from 3389 or higher
+  const usedSSHPorts = new Set(Object.values(data).map((vm) => vm.sshPort))
+  const usedHTTPPorts = new Set(Object.values(data).map((vm) => vm.httpPort))
+  const usedRDPPorts = new Set(Object.values(data).map((vm) => vm.rdpPort))
 
-    while (usedSSHPorts.includes(sshPort)) sshPort++
-    while (usedHTTPPorts.includes(httpPort)) httpPort++
-    while (usedRDPPorts.includes(rdpPort)) rdpPort++
+  // Get live Docker containers and their port bindings
+  const containers = await docker.listContainers({ all: true })
+  containers.forEach(container => {
+    const ports = container.Ports || []
+    ports.forEach(port => {
+      if (port.PublicPort) {
+        if (port.PrivatePort === 22) usedSSHPorts.add(port.PublicPort)
+        if (port.PrivatePort === 80) usedHTTPPorts.add(port.PublicPort)
+        if (port.PrivatePort === 3389) usedRDPPorts.add(port.PublicPort)
+      }
+    })
+  })
 
-    return { sshPort, httpPort, rdpPort }
-  }
+  let sshPort = CONFIG.SSH_PORT_START
+  let httpPort = CONFIG.HTTP_PORT_START
+  let rdpPort = CONFIG.RDP_PORT_START
+
+  while (usedSSHPorts.has(sshPort)) sshPort++
+  while (usedHTTPPorts.has(httpPort)) httpPort++
+  while (usedRDPPorts.has(rdpPort)) rdpPort++
+
+  return { sshPort, httpPort, rdpPort }
+}
+
 
 
   static async loadVMData() {
