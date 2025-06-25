@@ -59,7 +59,7 @@ function updateVMDisplay() {
 
     // Update VM details
     document.getElementById("vmDomain").textContent = `https://${currentVM.domain}`
-    document.getElementById("sshCommand").textContent = `ssh -p ${currentVM.sshPort} devuser@yourdomain.com`
+    document.getElementById("sshCommand").textContent = `ssh -p ${currentVM.sshPort} devuser@remixorbit.in`
     document.getElementById("sshPort").textContent = currentVM.sshPort
     document.getElementById("containerName").textContent = currentVM.containerName
     document.getElementById("createdAt").textContent = new Date(currentVM.createdAt).toLocaleString()
