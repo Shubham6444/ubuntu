@@ -52,37 +52,37 @@ MongoClient.connect(CONFIG.MONGODB_URL)
 
 // Utility functions
 class VMManager {
-static async getNextAvailablePorts() {
-  const data = await this.loadVMData()
+  static async getNextAvailablePorts() {
+    const data = await this.loadVMData()
 
-  const usedSSHPorts = new Set(Object.values(data).map((vm) => vm.sshPort))
-  const usedHTTPPorts = new Set(Object.values(data).map((vm) => vm.httpPort))
-  const usedRDPPorts = new Set(Object.values(data).map((vm) => vm.rdpPort))
+    const usedSSHPorts = new Set(Object.values(data).map((vm) => vm.sshPort))
+    const usedHTTPPorts = new Set(Object.values(data).map((vm) => vm.httpPort))
+    const usedRDPPorts = new Set(Object.values(data).map((vm) => vm.rdpPort))
 
-  // Get live Docker containers and their port bindings
-  const containers = await docker.listContainers({ all: true })
-  containers.forEach(container => {
-    const ports = container.Ports || []
-    ports.forEach(port => {
-      if (port.PublicPort) {
-        if (port.PrivatePort === 22) usedSSHPorts.add(port.PublicPort)
-        if (port.PrivatePort === 80) usedHTTPPorts.add(port.PublicPort)
-        if (port.PrivatePort === 3389) usedRDPPorts.add(port.PublicPort)
-      }
+    // Get live Docker containers and their port bindings
+    const containers = await docker.listContainers({ all: true })
+    containers.forEach(container => {
+      const ports = container.Ports || []
+      ports.forEach(port => {
+        if (port.PublicPort) {
+          if (port.PrivatePort === 22) usedSSHPorts.add(port.PublicPort)
+          if (port.PrivatePort === 80) usedHTTPPorts.add(port.PublicPort)
+          if (port.PrivatePort === 3389) usedRDPPorts.add(port.PublicPort)
+        }
+      })
     })
-  })
 
-  let sshPort = CONFIG.SSH_PORT_START
-  let httpPort = CONFIG.HTTP_PORT_START
-  let rdpPort = CONFIG.RDP_PORT_START
+    let sshPort = CONFIG.SSH_PORT_START
+    let httpPort = CONFIG.HTTP_PORT_START
+    let rdpPort = CONFIG.RDP_PORT_START
 
-  while (usedSSHPorts.has(sshPort)) sshPort++
-  while (usedHTTPPorts.has(httpPort)) httpPort++
-  while (usedRDPPorts.has(rdpPort)) rdpPort++
+    while (usedSSHPorts.has(sshPort)) sshPort++
+    while (usedHTTPPorts.has(httpPort)) httpPort++
+    while (usedRDPPorts.has(rdpPort)) rdpPort++
 
-  return { sshPort, httpPort, rdpPort }
-}
-//update
+    return { sshPort, httpPort, rdpPort }
+  }
+  //update
 
 
 
@@ -165,8 +165,60 @@ static async getNextAvailablePorts() {
                     chmod 700 /home/devuser/.ssh &&
                     
                     # Create welcome page
-                    echo '<h1>Welcome to your VM!</h1><p>Container: ${containerName}</p><p>SSH Port: ${sshPort}</p><p>User: devuser</p><p>Status: Ready!</p>' > /var/www/html/index.html &&
-                    
+                    // echo '<h1>Welcome to your VM!</h1><p>Container: ${containerName}</p><p>SSH Port: ${sshPort}</p><p>User: devuser</p><p>Status: Ready!</p>' > /var/www/html/index.html &&
+                    cat <<EOF > /var/www/html/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Welcome to Your VM</title>
+  <style>
+    body {
+      background: linear-gradient(to right, #4facfe, #00f2fe);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+      text-align: center;
+      padding: 50px;
+    }
+    .container {
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 600px;
+      margin: auto;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 1.2em;
+      margin: 10px 0;
+    }
+    .tag {
+      display: inline-block;
+      background: #ffffff22;
+      padding: 10px 20px;
+      border-radius: 25px;
+      font-weight: bold;
+      margin: 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Welcome to Your Virtual Machine</h1>
+    <p class="tag">🆔 Container: ${containerName}</p>
+    <p class="tag">🔐 SSH Port: ${sshPort}</p>
+    <p class="tag">👤 User: devuser</p>
+    <p class="tag">✅ Status: Ready</p>
+    <p>Use the SSH port above to log in and get started.</p>
+  </div>
+</body>
+</html>
+EOF
+
                     # Start services
                     service ssh start &&
                     service nginx start &&
@@ -236,6 +288,17 @@ static async getNextAvailablePorts() {
       }
 
       console.log(`Container ${containerName} created successfully`)
+      try {
+        const fixExec = await container.exec({
+          Cmd: ["/bin/bash", "-c", "chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html"],
+          AttachStdout: true,
+          AttachStderr: true,
+        })
+        await fixExec.start()
+        console.log("Permissions set inside container")
+      } catch (err) {
+        console.error("Permission setup error:", err)
+      }
       return container
     } catch (error) {
       console.error("Container creation error:", error)
